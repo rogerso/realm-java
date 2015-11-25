@@ -21,6 +21,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.RemoteException;
@@ -29,6 +30,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import io.realm.Realm;
+import io.realm.RealmChangeListener;
 import io.realm.entities.AllTypes;
 
 /**
@@ -67,6 +69,7 @@ public class RemoteProcessService extends Service {
 
     private static RemoteProcessService thiz;
     private Realm testRealm;
+    private RealmChangeListener listener;
 
     private final Messenger messenger = new Messenger(new IncomingHandler());
     private Messenger client;
@@ -116,8 +119,8 @@ public class RemoteProcessService extends Service {
         return element.getClassName() + " line " + element.getLineNumber() + ": ";
     }
 
+    // ======== testCreateInitialRealm ========
     public final static Step stepCreateInitialRealm_A = new Step(10) {
-
         @Override
         void run() {
             thiz.testRealm = Realm.getInstance(thiz);
@@ -132,14 +135,76 @@ public class RemoteProcessService extends Service {
         }
     };
 
+    // ======== testExitProcess ========
     public final static Step stepExitProcess_A = new Step(20) {
-
         @Override
         void run() {
             thiz.testRealm = Realm.getInstance(thiz);
             thiz.testRealm.close();
             response(null);
             Runtime.getRuntime().exit(0);
+        }
+    };
+
+    // ======== testEnableNotification ========
+    public final static Step stepEnableNotification_A = new Step(30) {
+        @Override
+        void run() {
+            Realm.enableInterprocessNotification(thiz.getApplicationContext());
+            thiz.testRealm = Realm.getInstance(thiz);
+            thiz.testRealm.beginTransaction();
+            thiz.testRealm.createObject(AllTypes.class);
+            thiz.testRealm.commitTransaction();
+            response(null);
+        }
+    };
+
+    public final static Step stepEnableNotification_B = new Step(31) {
+        @Override
+        void run() {
+            thiz.listener = new RealmChangeListener() {
+                @Override
+                public void onChange() {
+                    int expected = 2;
+                    int got = thiz.testRealm.allObjects(AllTypes.class).size();
+                    thiz.testRealm.removeAllChangeListeners();
+                    thiz.testRealm.close();
+                    if (expected == got) {
+                        response(null);
+                    } else {
+                        response(currentLine() + "expected: " + expected + ", but got " + got);
+                    }
+                }
+            };
+
+            thiz.testRealm.addChangeListener(thiz.listener);
+            // Starting loop to wait for the change listener
+            Looper.loop();
+        }
+    };
+
+    // ======== testDisableNotification ========
+    public final static Step stepDisableNotification_A = new Step(40) {
+        @Override
+        void run() {
+            Realm.enableInterprocessNotification(thiz.getApplicationContext());
+            thiz.testRealm = Realm.getInstance(thiz);
+            thiz.testRealm.beginTransaction();
+            thiz.testRealm.createObject(AllTypes.class);
+            thiz.testRealm.commitTransaction();
+            response(null);
+        }
+    };
+
+    public final static Step stepDisableNotification_B = new Step(41) {
+        @Override
+        void run() {
+            Realm.disableInterprocessNotification();
+            thiz.testRealm.beginTransaction();
+            thiz.testRealm.createObject(AllTypes.class);
+            thiz.testRealm.commitTransaction();
+            thiz.testRealm.close();
+            response(null);
         }
     };
 }

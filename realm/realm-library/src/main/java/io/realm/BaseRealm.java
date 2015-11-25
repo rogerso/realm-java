@@ -17,6 +17,10 @@
 
 package io.realm;
 
+import android.app.ActivityManager;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -27,6 +31,7 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -89,6 +94,14 @@ abstract class BaseRealm implements Closeable {
     RealmSchema schema;
     Handler handler;
     HandlerController handlerController;
+
+    // For multi processes support
+    private static Context appContext;
+    private static String packageName;
+    private static Set<String> broadcastPackages = new HashSet<String>();
+    private static final String BROADCAST_ACTION = ".REALM_CHANGED";
+    private static int processId;
+    private static RealmBroadcastReceiver broadcastReceiver;
 
     static {
         RealmLog.add(BuildConfig.DEBUG ? new DebugAndroidLogger() : new ReleaseAndroidLogger());
@@ -331,13 +344,22 @@ abstract class BaseRealm implements Closeable {
         checkIfValid();
         sharedGroupManager.commitAndContinueAsRead();
 
+        notifyHandlers(getPath(), this);
+
+        // Interprocess notification is enabled.
+        if (appContext != null) {
+            sendBroadcast();
+        }
+    }
+
+    static void notifyHandlers(String path, BaseRealm realm) {
         for (Map.Entry<Handler, String> handlerIntegerEntry : handlers.entrySet()) {
             Handler handler = handlerIntegerEntry.getKey();
             String realmPath = handlerIntegerEntry.getValue();
 
             // Notify at once on thread doing the commit
-            if (handler.equals(this.handler)) {
-                sendNotifications();
+            if (realm!= null && handler.equals(realm.handler)) {
+                realm.sendNotifications();
                 continue;
             }
 
@@ -346,7 +368,7 @@ abstract class BaseRealm implements Closeable {
             // as the target thread consumes messages at the same time. In this case it is not a problem as worst
             // case we end up with two REALM_CHANGED messages in the queue.
             if (
-                    realmPath.equals(configuration.getPath())            // It's the right realm
+                    realmPath.equals(path)            // It's the right realm
                             && !handler.hasMessages(HandlerController.REALM_CHANGED)       // The right message
                             && handler.getLooper().getThread().isAlive() // The receiving thread is alive
                     ) {
@@ -355,6 +377,49 @@ abstract class BaseRealm implements Closeable {
                             "to prevent this.");
                 }
             }
+        }
+    }
+
+    // Not thread safe, and no need to make it thread safe i think?
+    private void sendBroadcast() {
+        Intent intent = new Intent();
+        intent.setAction(packageName + BROADCAST_ACTION);
+        intent.putExtra(RealmBroadcastReceiver.PARAM_PID, processId);
+        intent.putExtra(RealmBroadcastReceiver.PARAM_REALM_PATH, getPath());
+        appContext.sendBroadcast(intent);
+    }
+
+    // TODO: Enable multi packages support
+    // Not thread safe, and no need to make it thread safe i think?
+    public static void enableInterprocessNotification(Context context) {
+        if (appContext != null) {
+            // It is enabled already.
+            return;
+        }
+        appContext = context.getApplicationContext();
+        packageName = appContext.getPackageName();
+
+        broadcastPackages.add(packageName);
+
+        IntentFilter filter = new IntentFilter();
+        for (String packageName : broadcastPackages) {
+            filter.addAction(packageName + BROADCAST_ACTION);
+        }
+
+        broadcastReceiver = new RealmBroadcastReceiver();
+        appContext.registerReceiver(broadcastReceiver, filter);
+
+        processId = android.os.Process.myPid();
+    }
+
+    public static void disableInterprocessNotification() {
+        if (appContext != null) {
+            processId = 0;
+            appContext.unregisterReceiver(broadcastReceiver);
+            broadcastReceiver = null;
+            broadcastPackages.clear();
+            packageName = null;
+            appContext = null;
         }
     }
 
