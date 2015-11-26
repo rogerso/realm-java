@@ -335,7 +335,7 @@ public class RealmInterprocessTest extends AndroidTestCase {
             @Override
             public void run() {
                 // Step 1
-                Realm.enableInterprocessNotification(thiz.getContext());
+                Realm.enableInterprocessNotification(thiz.getContext(), null);
                 thiz.testRealm = Realm.getInstance(thiz.getContext());
                 assertEquals(thiz.testRealm.allObjects(AllTypes.class).size(), 0);
                 thiz.testRealm.addChangeListener(thiz.listener);
@@ -400,7 +400,7 @@ public class RealmInterprocessTest extends AndroidTestCase {
                 @Override
                 public void run() {
                     // Step 1
-                    Realm.enableInterprocessNotification(thiz.getContext());
+                    Realm.enableInterprocessNotification(thiz.getContext(), null);
                     thiz.testRealm = Realm.getInstance(thiz.getContext());
                     assertEquals(thiz.testRealm.allObjects(AllTypes.class).size(), 0);
                     thiz.testRealm.addChangeListener(thiz.listener);
@@ -431,7 +431,7 @@ public class RealmInterprocessTest extends AndroidTestCase {
                 postDelayed(new Runnable() {
                     @Override
                     public void run() {
-                        Realm.enableInterprocessNotification(thiz.getContext());
+                        Realm.enableInterprocessNotification(thiz.getContext(), null);
 
                         // Step B
                         thiz.triggerServiceStep(RemoteProcessService.stepDisableNotification_B);

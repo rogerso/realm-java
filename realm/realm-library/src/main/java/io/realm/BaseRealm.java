@@ -98,7 +98,6 @@ abstract class BaseRealm implements Closeable {
     // For multi processes support
     private static Context appContext;
     private static String packageName;
-    private static Set<String> broadcastPackages = new HashSet<String>();
     private static final String BROADCAST_ACTION = ".REALM_CHANGED";
     private static int processId;
     private static RealmBroadcastReceiver broadcastReceiver;
@@ -391,20 +390,20 @@ abstract class BaseRealm implements Closeable {
 
     // TODO: Enable multi packages support
     // Not thread safe, and no need to make it thread safe i think?
-    public static void enableInterprocessNotification(Context context) {
+    public static void enableInterprocessNotification(Context context, String targetPackageName) {
         if (appContext != null) {
             // It is enabled already.
             return;
         }
         appContext = context.getApplicationContext();
-        packageName = appContext.getPackageName();
-
-        broadcastPackages.add(packageName);
+        if (targetPackageName == null) {
+            packageName = appContext.getPackageName();
+        } else {
+            packageName = targetPackageName;
+        }
 
         IntentFilter filter = new IntentFilter();
-        for (String packageName : broadcastPackages) {
-            filter.addAction(packageName + BROADCAST_ACTION);
-        }
+        filter.addAction(packageName + BROADCAST_ACTION);
 
         broadcastReceiver = new RealmBroadcastReceiver();
         appContext.registerReceiver(broadcastReceiver, filter);
@@ -417,7 +416,6 @@ abstract class BaseRealm implements Closeable {
             processId = 0;
             appContext.unregisterReceiver(broadcastReceiver);
             broadcastReceiver = null;
-            broadcastPackages.clear();
             packageName = null;
             appContext = null;
         }

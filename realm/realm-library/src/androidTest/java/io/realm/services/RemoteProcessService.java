@@ -150,7 +150,7 @@ public class RemoteProcessService extends Service {
     public final static Step stepEnableNotification_A = new Step(30) {
         @Override
         void run() {
-            Realm.enableInterprocessNotification(thiz.getApplicationContext());
+            Realm.enableInterprocessNotification(thiz.getApplicationContext(), null);
             thiz.testRealm = Realm.getInstance(thiz);
             thiz.testRealm.beginTransaction();
             thiz.testRealm.createObject(AllTypes.class);
@@ -187,7 +187,7 @@ public class RemoteProcessService extends Service {
     public final static Step stepDisableNotification_A = new Step(40) {
         @Override
         void run() {
-            Realm.enableInterprocessNotification(thiz.getApplicationContext());
+            Realm.enableInterprocessNotification(thiz.getApplicationContext(), null);
             thiz.testRealm = Realm.getInstance(thiz);
             thiz.testRealm.beginTransaction();
             thiz.testRealm.createObject(AllTypes.class);
