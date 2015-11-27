@@ -180,6 +180,7 @@ public class RealmInterprocessTest extends AndroidTestCase {
 
         int counter = 10;
         if (testRealm != null) {
+            testRealm.removeAllChangeListeners();
             testRealm.close();
         }
         listener = null;
@@ -390,10 +391,10 @@ public class RealmInterprocessTest extends AndroidTestCase {
 
 
     // 1. Enable the interprocess notification, create Realm, and then disable the interprocess notification.
-    // A. Enable the interprocess notification, Open the Realm, create an object in Realm.
-    // 2. Wait to see if the listener gets triggered by step A. If not, enable the interprocess notification.
-    // B. Disable the interprocess notification, create another object in Realm.
-    // 3. Wait to see if the listener gets triggered by step B. If not, done.
+    // A. Enable the interprocess notification, Open the Realm, create an object in Realm. Wait and then send response.
+    // 2. Check if the listener gets triggered by step A. If not, enable the interprocess notification.
+    // B. Disable the interprocess notification, create another object in Realm.Wait  and then send response.
+    // 3. Check if the listener gets triggered by step B. If not, done.
     private static class TestDisableNotificationHandle extends InterprocessHandler {
         public TestDisableNotificationHandle() {
             super(new Runnable() {
@@ -427,25 +428,15 @@ public class RealmInterprocessTest extends AndroidTestCase {
             super.handleMessage(msg);
             if (msg.what == RemoteProcessService.stepDisableNotification_A.message) {
                 // Step 2
-                // Realm has been changed, wait to see if the listener gets called.
-                postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        Realm.enableInterprocessNotification(thiz.getContext(), null);
+                // Realm has been changed, listener is not triggered in 100ms.
+                Realm.enableInterprocessNotification(thiz.getContext(), null);
 
-                        // Step B
-                        thiz.triggerServiceStep(RemoteProcessService.stepDisableNotification_B);
-                    }
-                }, 100);
+                // Step B
+                thiz.triggerServiceStep(RemoteProcessService.stepDisableNotification_B);
             } else if (msg.what == RemoteProcessService.stepDisableNotification_B.message) {
                 // Step 3
-                // Realm has been changed again, wait to see if the listener gets called.
-                postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        done();
-                    }
-                }, 100);
+                // Realm has been changed again, listener is not triggered in 100ms.
+                done();
             } else {
                 assertTrue(false);
             }
@@ -453,6 +444,69 @@ public class RealmInterprocessTest extends AndroidTestCase {
     }
     public void testDisableNotification() {
         interprocessHandler = new TestDisableNotificationHandle();
+        Looper.loop();
+    }
+
+    // 1. Enable the interprocess notification, create Realm, and then set auto-refresh disabled.
+    // A. Enable the interprocess notification, create Realm, create a object in Realm, wait 100ms for let main process
+    //    handle the REALM_CHANGED before next step.
+    // 2. Enable auto-refresh
+    // B. Create another object in Realm
+    // 3. The change listener gets triggered by step B, done.
+    private static class TestSetAutoRefreshHandler extends  InterprocessHandler {
+        public TestSetAutoRefreshHandler() {
+            super(new Runnable() {
+                @Override
+                public void run() {
+                    // Step 1
+                    Realm.enableInterprocessNotification(thiz.getContext(), null);
+                    thiz.testRealm = Realm.getInstance(thiz.getContext());
+                    thiz.testRealm.setAutoRefresh(false);
+                    assertEquals(thiz.testRealm.allObjects(AllTypes.class).size(), 0);
+                    thiz.listener = new RealmChangeListener() {
+                        @Override
+                        public void onChange() {
+                            // This should not be triggered
+                            assertTrue(false);
+                        }
+                    };
+                    thiz.testRealm.addChangeListener(thiz.listener);
+
+                    // Step A
+                    thiz.triggerServiceStep(RemoteProcessService.stepSetAutoRefresh_A);
+                }
+            });
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+            if (msg.what == RemoteProcessService.stepSetAutoRefresh_A.message) {
+                // Step 2
+                clearTimeoutFlag();
+                thiz.testRealm.removeChangeListener(thiz.listener);
+                thiz.listener = new RealmChangeListener() {
+                    @Override
+                    public void onChange() {
+                        // Step 3
+                        assertEquals(2, thiz.testRealm.allObjects(AllTypes.class).size());
+                        done();
+                    }
+                };
+                thiz.testRealm.addChangeListener(thiz.listener);
+                thiz.testRealm.setAutoRefresh(true);
+
+                // Step B
+                thiz.triggerServiceStep(RemoteProcessService.stepSetAutoRefresh_B);
+            } else if (msg.what == RemoteProcessService.stepSetAutoRefresh_B.message) {
+                clearTimeoutFlag();
+            } else {
+                assertTrue(false);
+            }
+        }
+    }
+    public void testSetAutoRefresh() {
+        interprocessHandler = new TestSetAutoRefreshHandler();
         Looper.loop();
     }
 }

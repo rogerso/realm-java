@@ -42,6 +42,9 @@ public class RemoteProcessService extends Service {
         public final int message;
         private Step(int message) {
             this.message = message;
+            if (stepMap.containsKey(message)) {
+                throw new RuntimeException("Duplicated message " + message + " in stepMap!");
+            }
             stepMap.put(message, this);
         }
 
@@ -191,6 +194,14 @@ public class RemoteProcessService extends Service {
             thiz.testRealm = Realm.getInstance(thiz);
             thiz.testRealm.beginTransaction();
             thiz.testRealm.createObject(AllTypes.class);
+            try {
+                // Sleep to give some time that main process can have a chance handle the REALM_CHANGED before the
+                // response to trigger next step.
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                response(e.getMessage());
+                return;
+            }
             thiz.testRealm.commitTransaction();
             response(null);
         }
@@ -200,6 +211,46 @@ public class RemoteProcessService extends Service {
         @Override
         void run() {
             Realm.disableInterprocessNotification();
+            thiz.testRealm.beginTransaction();
+            thiz.testRealm.createObject(AllTypes.class);
+            thiz.testRealm.commitTransaction();
+            thiz.testRealm.close();
+            try {
+                // Sleep to give some time that main process can have a chance handle the REALM_CHANGED before the
+                // response to trigger next step.
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                response(e.getMessage());
+                return;
+            }
+            response(null);
+        }
+    };
+
+    // ======== testSetAutoRefresh ========
+    public final static Step stepSetAutoRefresh_A = new Step(50) {
+        @Override
+        void run() {
+            Realm.enableInterprocessNotification(thiz.getApplicationContext(), null);
+            thiz.testRealm = Realm.getInstance(thiz);
+            thiz.testRealm.beginTransaction();
+            thiz.testRealm.createObject(AllTypes.class);
+            thiz.testRealm.commitTransaction();
+            try {
+                // Sleep to give some time that main process can have a chance handle the REALM_CHANGED before the
+                // response to trigger next step.
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                response(e.getMessage());
+                return;
+            }
+            response(null);
+        }
+    };
+
+    public final static Step stepSetAutoRefresh_B = new Step(51) {
+        @Override
+        void run() {
             thiz.testRealm.beginTransaction();
             thiz.testRealm.createObject(AllTypes.class);
             thiz.testRealm.commitTransaction();
