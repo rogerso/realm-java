@@ -30,6 +30,7 @@ import android.os.Messenger;
 import android.os.RemoteException;
 import android.test.AndroidTestCase;
 
+import java.io.File;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -518,10 +519,10 @@ public class RealmInterprocessTest extends AndroidTestCase {
     // 3. Try to compact Realm, and it should return false.
     // C. Cancel transaction, and close the Realm.
     // 4. Compact the Realm, and it should return true. Done.
-    private static class TestCompact extends  InterprocessHandler {
+    private static class TestCompactHandler extends  InterprocessHandler {
         private RealmConfiguration configuration = new RealmConfiguration.Builder(thiz.getContext()).build();
 
-        public TestCompact() {
+        public TestCompactHandler() {
             super(new Runnable() {
                 @Override
                 public void run() {
@@ -562,7 +563,66 @@ public class RealmInterprocessTest extends AndroidTestCase {
         }
     }
     public void testCompact() {
-        interprocessHandler = new TestCompact();
+        interprocessHandler = new TestCompactHandler();
+        Looper.loop();
+    }
+
+    // 1. Create a Realm instance in main process.
+    // A. Check if the Realm file exist, then delete it.
+    // 2.1. Check if the file exist, should be no.
+    // 2.2. Create an object in the opened Realm, Check if it gets written. And check the file existence, should be no.
+    //      then close the Realm.
+    // 2.3. Create a new Realm instance, check if there is any objects in. Should be no, the object created in 2.2 is
+    //      not in this Realm file. Close the Realm, check file existence, should be yes.
+    private static class TestDeleteHandler extends  InterprocessHandler {
+        public TestDeleteHandler() {
+            super(new Runnable() {
+                @Override
+                public void run() {
+                    // Step 1
+                    thiz.testRealm = Realm.getInstance(thiz.getContext());
+
+                    // Step A
+                    thiz.triggerServiceStep(RemoteProcessService.stepDelete_A);
+                }
+            });
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+            if (msg.what == RemoteProcessService.stepDelete_A.message) {
+                clearTimeoutFlag();
+
+                // Step 2.1
+                RealmConfiguration configuration = thiz.testRealm.getConfiguration();
+                File file = new File(configuration.getPath());
+                assertFalse(file.exists());
+
+                // Step 2.2
+                thiz.testRealm.beginTransaction();
+                thiz.testRealm.createObject(AllTypes.class);
+                thiz.testRealm.commitTransaction();
+                assertEquals(1, thiz.testRealm.allObjects(AllTypes.class).size());
+
+                assertFalse(file.exists());
+                thiz.testRealm.close();
+
+                // Step 2.3
+                thiz.testRealm = Realm.getInstance(thiz.getContext());
+                assertEquals(0, thiz.testRealm.allObjects(AllTypes.class).size());
+                thiz.testRealm.close();
+                thiz.testRealm = null;
+                assertTrue(file.exists());
+
+                done();
+            } else {
+                assertTrue(false);
+            }
+        }
+    }
+    public void testDelete() {
+        interprocessHandler = new TestDeleteHandler();
         Looper.loop();
     }
 }

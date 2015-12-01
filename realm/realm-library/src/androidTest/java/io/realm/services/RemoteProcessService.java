@@ -26,11 +26,13 @@ import android.os.Message;
 import android.os.Messenger;
 import android.os.RemoteException;
 
+import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
 import io.realm.Realm;
 import io.realm.RealmChangeListener;
+import io.realm.RealmConfiguration;
 import io.realm.entities.AllTypes;
 
 /**
@@ -279,6 +281,25 @@ public class RemoteProcessService extends Service {
         void run() {
             thiz.testRealm.cancelTransaction();
             thiz.testRealm.close();
+            response(null);
+        }
+    };
+
+    // ======== testDelete ========
+    public final static Step stepDelete_A = new Step(70) {
+        @Override
+        void run() {
+            RealmConfiguration configuration = new RealmConfiguration.Builder(thiz).build();
+            File file = new File(configuration.getPath());
+            if (!file.exists()) {
+                response(configuration.getPath() + " doesn't exist!");
+                return;
+            }
+            if (!Realm.deleteRealm(configuration)) {
+                response("deleteRealm on " + configuration.getPath() + " failed!");
+                return;
+            }
+
             response(null);
         }
     };
