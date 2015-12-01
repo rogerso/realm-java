@@ -509,4 +509,60 @@ public class RealmInterprocessTest extends AndroidTestCase {
         interprocessHandler = new TestSetAutoRefreshHandler();
         Looper.loop();
     }
+
+
+    // 1. Wait the service process starts.
+    // A. Open the Realm instance.
+    // 2. Try to compact Realm, and it should return false.
+    // B. Starts a transaction.
+    // 3. Try to compact Realm, and it should return false.
+    // C. Cancel transaction, and close the Realm.
+    // 4. Compact the Realm, and it should return true. Done.
+    private static class TestCompact extends  InterprocessHandler {
+        private RealmConfiguration configuration = new RealmConfiguration.Builder(thiz.getContext()).build();
+
+        public TestCompact() {
+            super(new Runnable() {
+                @Override
+                public void run() {
+                    // Step 1
+
+                    // Step A
+                    thiz.triggerServiceStep(RemoteProcessService.stepCompact_A);
+                }
+            });
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+            if (msg.what == RemoteProcessService.stepCompact_A.message) {
+                // Step 2
+                clearTimeoutFlag();
+                assertFalse(Realm.compactRealm(configuration));
+
+                // Step B
+                thiz.triggerServiceStep(RemoteProcessService.stepCompact_B);
+            } else if (msg.what == RemoteProcessService.stepCompact_B.message) {
+                // Step 3
+                clearTimeoutFlag();
+                assertFalse(Realm.compactRealm(configuration));
+
+                // Step C
+                thiz.triggerServiceStep(RemoteProcessService.stepCompact_C);
+            } else if (msg.what == RemoteProcessService.stepCompact_C.message) {
+                // Step 4
+                clearTimeoutFlag();
+                assertTrue(Realm.compactRealm(configuration));
+
+                done();
+            } else {
+                assertTrue(false);
+            }
+        }
+    }
+    public void testCompact() {
+        interprocessHandler = new TestCompact();
+        Looper.loop();
+    }
 }

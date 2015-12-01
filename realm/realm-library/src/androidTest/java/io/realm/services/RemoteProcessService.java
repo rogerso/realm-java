@@ -258,4 +258,28 @@ public class RemoteProcessService extends Service {
             response(null);
         }
     };
+
+    // ======== testCompact ========
+    public final static Step stepCompact_A = new Step(60) {
+        @Override
+        void run() {
+            thiz.testRealm = Realm.getInstance(thiz);
+            response(null);
+        }
+    };
+    public final static Step stepCompact_B = new Step(61) {
+        @Override
+        void run() {
+            thiz.testRealm.beginTransaction();
+            response(null);
+        }
+    };
+    public final static Step stepCompact_C = new Step(62) {
+        @Override
+        void run() {
+            thiz.testRealm.cancelTransaction();
+            thiz.testRealm.close();
+            response(null);
+        }
+    };
 }
